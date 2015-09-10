@@ -9,6 +9,14 @@ require 'delayed/backend/base'
 module Delayed
   module Backend
     module Test
+      def self.run
+        worker.work_off(1)
+      end
+
+      def self.worker
+        @worker ||= ::Delayed::Worker.new
+      end
+
       class Job
         attr_accessor :id
         attr_accessor :priority
@@ -106,7 +114,7 @@ module Delayed
 
           self.class.all << self unless self.class.all.include?(self)
 
-          ::Delayed::Worker.new.work_off(1)
+          ::Delayed::Backend::Test.run
 
           true
         end

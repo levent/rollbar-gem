@@ -19,7 +19,7 @@ describe Rollbar::Delayed, :reconfigure_notifier => true do
     Rollbar::Delayed.wrap_worker
     Delayed::Worker.backend = :test
 
-    Delayed::Worker.reset
+    Delayed::Backend::Test::Job.delete_all
   end
 
   let(:logger) { Rollbar.logger }
