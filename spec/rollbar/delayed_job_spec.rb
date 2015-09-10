@@ -6,41 +6,62 @@ describe Rollbar::Delayed, :reconfigure_notifier => true do
   class FailingJob
     class TestException < Exception; end
 
-    def perform
-      fail(TestException, 'failing')
+    def do_job
+      this = will_crash!
+    end
+
+    def do_job_please!(a, b)
+      this = will_crash_again!
     end
   end
-
-  module DummyBackend
-    class Job
-      include Delayed::Backend::Base
-
-      attr_accessor :handler, :attempts
-
-      def initialize(options = {})
-        @payload_object = options[:payload_object]
-        @attempts = 0
-      end
-    end
-  end
-
-  let(:logger) { Rollbar.logger }
 
   before do
     Rollbar::Delayed.wrap_worker
-    Delayed::Worker.delay_jobs = false
-    Delayed::Worker.backend = DummyBackend::Job
+    Delayed::Worker.backend = :test
+
+    Delayed::Worker.reset
   end
 
+  let(:logger) { Rollbar.logger }
   let(:expected_args) do
-    [kind_of(FailingJob::TestException), { :use_exception_level_filters => true}]
+    [kind_of(NoMethodError), { :use_exception_level_filters => true }]
   end
 
-  it 'sends the exception' do
-    expect_any_instance_of(Rollbar::Notifier).to receive(:error).with(*expected_args)
+  context 'with delayed method without arguments failing' do
+    let(:expected_scope) do
+      {
+        :request => {
+          'object' => {},
+          'args' => [],
+          'method_name' => 'do_job'
+        }
+      }
+    end
 
-    expect do
-      Delayed::Job.enqueue(FailingJob.new)
-    end.to raise_error(FailingJob::TestException)
+    it 'sends the exception' do
+      expect(Rollbar).to receive(:scope).with(expected_scope).and_call_original
+      expect_any_instance_of(Rollbar::Notifier).to receive(:error).with(*expected_args)
+
+      FailingJob.new.delay.do_job
+    end
+  end
+
+  context 'with delayed method with arguments failing' do
+    let(:expected_scope) do
+      {
+        :request => {
+          'object' => {},
+          'args' => ['foo', 'bar'],
+          'method_name' => 'do_job_please!'
+        }
+      }
+    end
+
+    it 'sends the exception' do
+      expect(Rollbar).to receive(:scope).with(expected_scope).and_call_original
+      expect_any_instance_of(Rollbar::Notifier).to receive(:error).with(*expected_args)
+
+      FailingJob.new.delay.do_job_please!(:foo, :bar)
+    end
   end
 end
